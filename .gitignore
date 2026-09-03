@@ -2,5 +2,7 @@
 !.env.example
 node_modules/
 .wrangler/
+.npm-deploy-cache/
+dist/
 .DS_Store
 Thumbs.db
