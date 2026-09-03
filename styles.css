@@ -299,3 +299,17 @@ dialog::backdrop{background:rgba(6,28,22,.72);backdrop-filter:blur(8px)}
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}
 }
+
+.not-found-page{min-height:100svh;background:var(--paper);padding:34px clamp(20px,5vw,76px)}
+.not-found{min-height:calc(100svh - 68px);display:flex;flex-direction:column;justify-content:space-between}
+.not-found__copy{padding:12vh 0 8vh}
+.not-found__copy h1{max-width:900px;margin:0 0 28px;font:400 clamp(58px,9vw,138px)/.91 var(--serif);letter-spacing:-.055em;color:var(--forest)}
+.not-found__copy h1 em{color:var(--clay);font-style:normal}
+.not-found__copy>p:not(.kicker){max-width:500px;margin:0 0 34px;color:var(--muted);font-size:18px;line-height:1.7}
+@media(max-width:680px){
+  .not-found-page{padding:24px 20px}
+  .not-found{min-height:calc(100svh - 48px)}
+  .not-found__copy{padding:14vh 0 5vh}
+  .not-found__copy h1{font-size:clamp(52px,17vw,72px)}
+  .not-found__copy .pill-button{width:100%}
+}
