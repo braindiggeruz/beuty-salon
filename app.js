@@ -10,9 +10,10 @@ const navDialog = $('#mobile-menu');
 const navClose = $('.nav-close');
 const mobileAction = $('.mobile-action');
 const hero = $('.hero');
-const heroLeadAction = $('.hero .js-lead');
+const heroLeadAction = $('.hero__actions');
 const footer = $('.footer');
 const motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
+const BOOKING_URL = 'https://n659935.alteg.io/';
 
 /*
  * Motion is an enhancement, never a loading dependency. Interactive controls
@@ -180,6 +181,23 @@ function setupMobileAction() {
 
 setupMobileAction();
 
+/*
+ * Outbound links are the real conversion on this site: online booking and
+ * Instagram both leave the page, so they are tracked explicitly. No personal
+ * data is ever pushed - only which control was used and from which section.
+ */
+$$('.js-book').forEach(link => {
+  link.addEventListener('click', () => track('booking_click', {
+    source_section: link.closest('section')?.id || (link.closest('dialog') ? 'dialog' : 'global')
+  }));
+});
+
+$$('.js-ig').forEach(link => {
+  link.addEventListener('click', () => track('instagram_click', {
+    source_section: link.closest('section')?.id || (link.closest('dialog') ? 'dialog' : 'global')
+  }));
+});
+
 function trapDialogFocus(dialog, event) {
   if (event.key !== 'Tab') return;
 
@@ -346,8 +364,20 @@ function closeLead() {
   if (leadDialog.open) leadDialog.close();
 }
 
+const dialogSupported = typeof HTMLDialogElement === 'function'
+  && typeof HTMLDialogElement.prototype.showModal === 'function';
+
 $$('.js-lead').forEach(button => {
-  button.addEventListener('click', () => openLead(button));
+  button.addEventListener('click', () => {
+    // Without <dialog> support the picker cannot open, so the control still has
+    // to lead somewhere useful rather than doing nothing.
+    if (!dialogSupported) {
+      track('booking_click', { source_section: 'dialog_fallback' });
+      open(BOOKING_URL, '_blank', 'noopener');
+      return;
+    }
+    openLead(button);
+  });
 });
 
 leadClose.addEventListener('click', closeLead);
@@ -439,6 +469,17 @@ $$('.back-step', leadForm).forEach(button => {
   button.addEventListener('click', () => setStep(currentStep - 1));
 });
 
+/*
+ * Numbers arrive in every shape people type them. The salon reads these drafts
+ * by hand, so the message always carries one predictable Uzbek format.
+ */
+function formatPhone(value) {
+  const digits = value.replace(/\D/g, '');
+  const local = digits.startsWith('998') ? digits.slice(3) : digits;
+  if (local.length !== 9) return value.trim();
+  return `+998 ${local.slice(0, 2)} ${local.slice(2, 5)} ${local.slice(5, 7)} ${local.slice(7)}`;
+}
+
 function formatDate(value) {
   return new Intl.DateTimeFormat('ru-RU', {
     day: 'numeric', month: 'long', year: 'numeric'
@@ -456,7 +497,7 @@ leadForm.addEventListener('submit', event => {
     `Предпочтительная дата: ${formatDate(data.get('date'))}`,
     `Удобное время: ${data.get('time')}`,
     `Имя: ${data.get('name').trim()}`,
-    `Телефон: ${data.get('phone').trim()}`
+    `Телефон: ${formatPhone(data.get('phone'))}`
   ].join('\n');
 
   $$('.form-step', leadForm).forEach(panel => panel.hidden = true);
@@ -476,6 +517,7 @@ async function copySummary() {
     summaryField.select();
     document.execCommand('copy');
   }
+  track('lead_copy', { service_id: serviceField.value || 'not_selected' });
   showToast('Текст заявки скопирован');
 }
 
@@ -486,16 +528,23 @@ $('#share-lead').addEventListener('click', async () => {
     return;
   }
   try {
-    await navigator.share({ title: 'Предварительная заявка', text: summaryField.value });
+    await navigator.share({ title: 'Заявка в Lac & Nails', text: summaryField.value });
+    track('lead_share', { service_id: serviceField.value || 'not_selected', result: 'shared' });
   } catch (error) {
-    if (error.name !== 'AbortError') showToast('Не удалось открыть меню — текст можно скопировать');
+    if (error.name === 'AbortError') {
+      track('lead_share', { service_id: serviceField.value || 'not_selected', result: 'dismissed' });
+      return;
+    }
+    showToast('Не удалось открыть меню — текст можно скопировать');
   }
 });
 
 function showToast(message) {
   const toast = $('.toast');
-  toast.textContent = message;
+  // The live region has to be in the accessibility tree before its text
+  // changes, otherwise the update is never announced.
   toast.hidden = false;
+  toast.textContent = message;
   clearTimeout(showToast.timeout);
   showToast.timeout = setTimeout(() => toast.hidden = true, 2600);
 }
