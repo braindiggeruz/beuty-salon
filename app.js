@@ -8,6 +8,177 @@ const header = $('.site-header');
 const menuTrigger = $('.menu-trigger');
 const navDialog = $('#mobile-menu');
 const navClose = $('.nav-close');
+const mobileAction = $('.mobile-action');
+const hero = $('.hero');
+const heroLeadAction = $('.hero .js-lead');
+const footer = $('.footer');
+const motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
+
+/*
+ * Motion is an enhancement, never a loading dependency. Interactive controls
+ * stay visible; only editorial copy and imagery receive a one-time reveal.
+ */
+function setupScrollMotion() {
+  if (motionPreference.matches || !('IntersectionObserver' in window)) return;
+
+  const targets = new Set();
+  const linkedReveals = new Map();
+  const copyGroups = [
+    $$('.service-entry__intro > .eyebrow, .service-entry__intro > h2, .service-entry__intro > p:last-child'),
+    $$('.all-services__head .eyebrow, .all-services__head h2, .all-services__head > p'),
+    $$('.approach__statement > .eyebrow, .approach__statement > h2, .approach__lead'),
+    $$('.visit__content > .eyebrow, .visit__content > h2'),
+    $$('.faq__title > .eyebrow, .faq__title > h2'),
+    $$('.contact__copy > .eyebrow, .contact__copy > h2, .contact__address')
+  ];
+
+  copyGroups.forEach(group => group.forEach((element, index) => {
+    element.classList.add('reveal-copy');
+    element.style.setProperty('--reveal-delay', `${index * 55}ms`);
+    targets.add(element);
+  }));
+
+  $$('.feature-service__image, .visit__image, .contact__art').forEach(element => {
+    element.classList.add('reveal-mask');
+    const watchTarget = element.closest('.feature-service, .visit, .contact') || element;
+    const linked = linkedReveals.get(watchTarget) || [];
+    linked.push(element);
+    linkedReveals.set(watchTarget, linked);
+    targets.add(watchTarget);
+  });
+
+  $$('.question-cards, .visit__content ol').forEach(group => {
+    group.classList.add('reveal-stagger');
+    [...group.children].forEach((element, index) => {
+      element.style.setProperty('--reveal-order', index);
+    });
+    targets.add(group);
+  });
+
+  document.documentElement.classList.add('motion-ready');
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      entry.target.classList.add('is-visible');
+      linkedReveals.get(entry.target)?.forEach(element => element.classList.add('is-visible'));
+      observer.unobserve(entry.target);
+    });
+  }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+
+  targets.forEach(element => observer.observe(element));
+
+  motionPreference.addEventListener?.('change', event => {
+    if (!event.matches) return;
+    observer.disconnect();
+    targets.forEach(element => element.classList.add('is-visible'));
+    linkedReveals.forEach(elements => elements.forEach(element => element.classList.add('is-visible')));
+    document.documentElement.classList.remove('motion-ready');
+  }, { once: true });
+}
+
+setupScrollMotion();
+
+/*
+ * The fixed mobile CTA is intentionally contextual rather than permanently
+ * visible. The hero owns the primary action on the first screen; the fixed
+ * action takes over only after that screen has been passed, then yields to
+ * dialogs and the footer so it never competes with or covers their controls.
+ */
+function setupMobileAction() {
+  if (!mobileAction || !hero || !heroLeadAction) return;
+
+  const mobileViewport = matchMedia('(max-width: 680px)');
+  const state = {
+    heroPassed: false,
+    heroActionVisible: true,
+    footerVisible: false
+  };
+
+  const anyDialogOpen = () => $$('dialog[open]').length > 0;
+
+  function renderMobileAction() {
+    const eligible = mobileViewport.matches
+      && state.heroPassed
+      && !state.heroActionVisible;
+    const suppressed = anyDialogOpen() || state.footerVisible;
+
+    const unavailable = !eligible || suppressed;
+    mobileAction.classList.toggle('is-visible', eligible);
+    mobileAction.classList.toggle('is-suppressed', suppressed);
+    mobileAction.toggleAttribute('inert', unavailable);
+    mobileAction.setAttribute('aria-hidden', String(unavailable));
+  }
+
+  function elementIsVisible(element) {
+    if (!element) return false;
+    const rect = element.getBoundingClientRect();
+    return rect.bottom > 0
+      && rect.top < innerHeight
+      && rect.right > 0
+      && rect.left < innerWidth;
+  }
+
+  function measureMobileAction() {
+    const heroRect = hero.getBoundingClientRect();
+    state.heroPassed = heroRect.bottom <= 0;
+    state.heroActionVisible = elementIsVisible(heroLeadAction);
+    state.footerVisible = elementIsVisible(footer);
+    renderMobileAction();
+  }
+
+  let measureFrame = 0;
+  const scheduleMeasure = () => {
+    if (measureFrame) return;
+    measureFrame = requestAnimationFrame(() => {
+      measureFrame = 0;
+      measureMobileAction();
+    });
+  };
+
+  if ('IntersectionObserver' in window) {
+    const heroObserver = new IntersectionObserver(([entry]) => {
+      state.heroPassed = !entry.isIntersecting && entry.boundingClientRect.bottom <= 0;
+      renderMobileAction();
+    });
+    heroObserver.observe(hero);
+
+    const heroActionObserver = new IntersectionObserver(([entry]) => {
+      state.heroActionVisible = entry.isIntersecting;
+      renderMobileAction();
+    }, { threshold: 0.01 });
+    heroActionObserver.observe(heroLeadAction);
+
+    if (footer) {
+      const footerObserver = new IntersectionObserver(([entry]) => {
+        state.footerVisible = entry.isIntersecting;
+        renderMobileAction();
+      });
+      footerObserver.observe(footer);
+    }
+  } else {
+    addEventListener('scroll', scheduleMeasure, { passive: true });
+  }
+
+  addEventListener('resize', scheduleMeasure, { passive: true });
+  addEventListener('load', scheduleMeasure, { once: true });
+  addEventListener('pageshow', scheduleMeasure);
+  mobileViewport.addEventListener?.('change', scheduleMeasure);
+
+  // `showModal()` changes the `open` attribute but has no universal "open"
+  // event, so observing that attribute keeps this working for all dialogs,
+  // including any added later.
+  const dialogObserver = new MutationObserver(renderMobileAction);
+  dialogObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['open'],
+    subtree: true
+  });
+
+  measureMobileAction();
+}
+
+setupMobileAction();
 
 function trapDialogFocus(dialog, event) {
   if (event.key !== 'Tab') return;
@@ -132,6 +303,18 @@ function setStep(step) {
   leadTitle.textContent = stepTitles[step - 1];
   const activePanel = $(`.form-step[data-step="${step}"]`, leadForm);
   const firstField = $('select, input', activePanel);
+  if (leadDialog.open && !motionPreference.matches) {
+    activePanel.animate(
+      [
+        { opacity: 0, transform: 'translateY(8px)' },
+        { opacity: 1, transform: 'translateY(0)' }
+      ],
+      {
+        duration: 250,
+        easing: 'cubic-bezier(0.23, 1, 0.32, 1)'
+      }
+    );
+  }
   requestAnimationFrame(() => firstField?.focus());
 }
 
@@ -147,7 +330,7 @@ function resetLeadForm() {
 }
 
 function openLead(trigger) {
-  lastTrigger = trigger;
+  lastTrigger = navDialog.contains(trigger) ? menuTrigger : trigger;
   if (navDialog.open) closeNavigation({ restoreFocus: false });
   resetLeadForm();
   serviceField.value = trigger.dataset.service || '';
@@ -276,7 +459,8 @@ leadForm.addEventListener('submit', event => {
   progress.hidden = true;
   leadTitle.hidden = true;
   successPanel.hidden = false;
-  requestAnimationFrame(() => $('#success-title').focus());
+  leadDialog.scrollTop = 0;
+  requestAnimationFrame(() => $('#success-title').focus({ preventScroll: true }));
   track('lead_draft_ready', { service_id: data.get('service') });
 });
 
