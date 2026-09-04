@@ -356,7 +356,12 @@ leadDialog.addEventListener('cancel', event => {
   event.preventDefault();
   closeLead();
 });
-leadDialog.addEventListener('close', () => lastTrigger?.focus());
+leadDialog.addEventListener('close', () => {
+  const triggerToRestore = lastTrigger;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => triggerToRestore?.focus());
+  });
+});
 
 document.addEventListener('keydown', event => {
   const openDialog = leadDialog.open ? leadDialog : navDialog.open ? navDialog : null;
